@@ -7,19 +7,86 @@ output:
 
 
 ## Loading and preprocessing the data
-
-
+```{r}
+# Read the csv file
+activity <- read.csv("activity.csv",header=TRUE)
+# Adjust the date
+activity$date <- as.Date(activity$date)
+```
 
 ## What is mean total number of steps taken per day?
-
-
+```{r}
+# Calculate total number of steps taken on each day
+total_steps_per_day <- as.integer(with(activity,tapply(steps,date,sum,na.rm=TRUE)))
+hist(total_steps_per_day,breaks=10,col="gray",
+     xlab="Number of steps per day", main = "Histogram of total steps taken per day")
+cat("Mean of total steps per day : ", mean(total_steps_per_day))
+cat("Median of total steps per day : ",median(total_steps_per_day))
+```
 
 ## What is the average daily activity pattern?
-
+```{r}
+# Average daily activity pattern
+total_steps_per_interval <- with(activity,tapply(steps,interval,sum,na.rm=TRUE))
+plot(names(total_steps_per_interval),total_steps_per_interval,type="l",
+     xlab="Interval",ylab="Average steps",
+     main="Average steps across all days per 5 minute interval")
+cat("Maximum average steps across all days occur at inteval : ", names(total_steps_per_interval)[which.max(total_steps_per_interval)])
+```
 
 
 ## Imputing missing values
+```{r}
+cat("Number of missing values : ", sum(is.na(activity$steps)))
+```
 
+Check how the NA values are distributed on a day basis. Note each day has at max 288 entries
+```{r}
+with(activity,tapply(steps,date,function(x) {sum(is.na(x))}))
+```
+Since NA values on these specific days correspond to data not being available in any of the intervals, any sort of imputing isn't going to change the results.
 
+In other words, when data is missing on a specific day, it is missing across all the intervals of that day thereby any imputing based on mean/median would still yeild a NA result.
+
+Check how NA values are distributed on an interval basis. Note each interval has at max 61 days of data
+```{r}
+with(activity,tapply(steps,interval,function(x) {sum(is.na(x))}))
+```
+Bingo. This is the way to go. Pick mean of remaining data across other days in that interval and asssing it to missing intervals
+```{r}
+# Substitue missing values with mean value of that interval
+new_activity <- activity
+mean_steps_per_interval <- with(activity,tapply(steps,interval,mean,na.rm=TRUE))
+U <- which(is.na(new_activity$steps))
+new_activity$steps[U] <- mean_steps_per_interval[as.character(new_activity$interval[U])]
+```
+Done imputing the data. Missing values are replaced with mean steps of the interval in which the current NA value belongs.
+```{r}
+#histogram
+total_steps_per_day_new <- as.integer(with(new_activity,tapply(steps,date,sum,na.rm=TRUE)))
+hist(total_steps_per_day_new,breaks=10,col="gray",
+     xlab="Number of steps per day", 
+     main = "Histogram of total steps taken per day - after Imputing")
+cat("Mean of total steps per day (after imputing): ", mean(total_steps_per_day_new))
+cat("Median of total steps per day (after imputing): ",median(total_steps_per_day_new))
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+U <- weekdays(new_activity$date) %in% c("Saturday","Sunday")
+new_activity$day <- NA
+new_activity$day[U] <- as.character("Weekend")
+new_activity$day[!U] <- as.character("Weekday")
+
+weekday <- new_activity[new_activity$day=="Weekday",]
+weekday_mean_steps <- with(weekday,tapply(steps,interval,mean,na.rm=TRUE))
+
+weekend <- new_activity[new_activity$day=="Weekend",]
+weekend_mean_steps <- with(weekend,tapply(steps,interval,mean,na.rm=TRUE))
+
+par(mfrow=c(2,1),mar=c(2,3,2,1))
+plot(names(weekday_mean_steps),weekday_mean_steps,type="l",xlab="Interval", main="Average number of steps")
+legend("topright",legend="Weekday")
+plot(names(weekend_mean_steps),weekend_mean_steps,type="l",xlab="Interval")
+legend("topright",legend="Weekend")
+```
